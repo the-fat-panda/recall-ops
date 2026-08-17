@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import uuid
 import json
+import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import httpx2
 from langchain_cockroachdb import CockroachDBSaver
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from backend.infra.db import database_url, query
 from backend.orchestration.approval import approve_and_resume
@@ -19,7 +23,21 @@ from backend.orchestration.config import orders_api_url
 from backend.orchestration.state import AgentState
 from backend.schemas.alert import Alert
 
+
+def _client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+limiter = Limiter(key_func=_client_ip)
+RECALLOPS_ACCESS_KEY = os.getenv("RECALLOPS_ACCESS_KEY")
+
 app = FastAPI(title="RecallOps agent API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,6 +53,11 @@ class AskRequest(BaseModel):
 
 class ApproveRequest(BaseModel):
     thread_id: str
+
+
+def require_access_key(request: Request) -> None:
+    if RECALLOPS_ACCESS_KEY and request.headers.get("X-API-Key") != RECALLOPS_ACCESS_KEY:
+        raise HTTPException(status_code=401, detail="invalid or missing API key")
 
 
 def _card(state: AgentState) -> dict | None:
@@ -64,7 +87,12 @@ def health() -> dict[str, str]:
 
 
 @app.post("/ask")
-def ask(request: AskRequest) -> StreamingResponse:
+@limiter.limit("15/minute")
+def ask(
+    request: Request,
+    payload: AskRequest,
+    _: None = Depends(require_access_key),
+) -> StreamingResponse:
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -74,7 +102,7 @@ def ask(request: AskRequest) -> StreamingResponse:
                 checkpointer.setup()
                 graph = build_graph(checkpointer)
                 for update in graph.stream(
-                    AgentState(alert=request.alert, run_id=thread_id),
+                    AgentState(alert=payload.alert, run_id=thread_id),
                     config,
                     stream_mode="updates",
                 ):
@@ -103,7 +131,11 @@ def ask(request: AskRequest) -> StreamingResponse:
 
 
 @app.post("/reset")
-def reset() -> dict:
+@limiter.limit("30/minute")
+def reset(
+    request: Request,
+    _: None = Depends(require_access_key),
+) -> dict:
     try:
         with httpx2.Client(timeout=10.0) as client:
             response = client.post(f"{orders_api_url()}/reset")
@@ -123,8 +155,13 @@ def reset() -> dict:
 
 
 @app.post("/approve")
-def approve(request: ApproveRequest) -> dict:
-    config = {"configurable": {"thread_id": request.thread_id}}
+@limiter.limit("30/minute")
+def approve(
+    request: Request,
+    payload: ApproveRequest,
+    _: None = Depends(require_access_key),
+) -> dict:
+    config = {"configurable": {"thread_id": payload.thread_id}}
     with CockroachDBSaver.from_conn_string(database_url()) as checkpointer:
         checkpointer.setup()
         graph = build_graph(checkpointer)
@@ -139,7 +176,7 @@ def approve(request: ApproveRequest) -> dict:
         approve_and_resume(graph, config)
         state = AgentState.model_validate(graph.get_state(config).values)
     return {
-        "thread_id": request.thread_id,
+        "thread_id": payload.thread_id,
         "execution_result": state.execution_result,
         "outcome": state.outcome,
         "card": _card(state),
