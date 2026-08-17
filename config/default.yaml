@@ -1,0 +1,18 @@
+memory:
+  top_k: 5
+  min_similarity: 0.0
+reason:
+  min_confidence: 0.0
+confidence:
+  high_threshold: 0.75
+  medium_threshold: 0.50
+env:
+  current_version: "v1.0.0"
+llm:
+  base_url: "https://bedrock-mantle.us-east-1.api.aws/v1"
+  project_id: "proj_45u4rhzxyqx5ho7xdgpk"
+  model: "openai.gpt-oss-120b"
+  max_completion_tokens: 1024
+  reasoning_effort: "low"
+mcp:
+  url: "https://cockroachlabs.cloud/mcp"
