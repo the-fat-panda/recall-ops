@@ -1,14 +1,7 @@
 -- RecallOps Phase 1 schema.
 --
--- EXACT CockroachDB vector syntax used below (VERIFY against the target cluster):
---   embedding VECTOR(768)
---   CREATE VECTOR INDEX IF NOT EXISTS incidents_embedding_vector_idx
---       ON incidents (embedding);
--- CockroachDB documents `CREATE VECTOR INDEX ... (vector_column)` and L2 `<->`
--- searches. On older preview clusters, vector indexing may need
--- `SET CLUSTER SETTING feature.vector_index.enabled = true` (requires admin),
--- and some versions accept `USING cspann (embedding)` / `USING hnsw (embedding)`
--- instead. Do not issue that cluster setting from this application.
+-- Incident embeddings are stored as VECTOR(768) and indexed with a CockroachDB
+-- distributed vector index (cspann, L2 distance) for similarity search.
 
 CREATE TABLE IF NOT EXISTS incidents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

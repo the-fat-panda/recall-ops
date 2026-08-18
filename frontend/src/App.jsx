@@ -558,8 +558,8 @@ export default function App() {
               </button>
             </div>
             <p className="muted-copy custom-form-note">
-              The live heal demo is the CrashLoopBackOff card above. Custom
-              incidents show the agent's recommendation only.
+              The CrashLoopBackOff card above runs the full heal. Copy any
+              incident below into the form to see the agent's recommendation.
             </p>
             {message && <p className="inline-error">{message}</p>}
 
@@ -571,8 +571,14 @@ export default function App() {
               {knowledge.map(([signature, symptom]) => (
                 <article className="knowledge-card" key={signature}>
                   <strong>{signature}</strong>
-                  <p>{symptom}</p>
-                  <small>recommendation only</small>
+                  <div className="knowledge-row">
+                    <span className="knowledge-label">Service</span>
+                    <span className="knowledge-value">orders-api</span>
+                  </div>
+                  <div className="knowledge-row">
+                    <span className="knowledge-label">Symptom</span>
+                    <span className="knowledge-value">{symptom}</span>
+                  </div>
                 </article>
               ))}
             </div>
