@@ -68,6 +68,8 @@ The demo proves the full loop against one real service. Here is how each piece g
 
 **Built for resilience and control.** The checkpoint-in-CockroachDB mechanism that powers the approval pause is the same mechanism a production system uses to survive restarts and resume long-running incident responses. It was built once and does double duty. Access to the API is protected by a shared key and per-IP rate limiting. Database access is restricted to the deployment host and runs over TLS with certificate verification. A cloud budget cap automatically cuts off the model provider if spend crosses a set threshold.
 
+![alt text](image.png)
+
 ## Stack
 
 - **Backend:** Python, FastAPI, LangGraph for the agent loop.
